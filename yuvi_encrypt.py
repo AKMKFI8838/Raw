@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════╗
-║         YuviXAkshit TOOL v3.1 — ENCRYPT + DECRYPT           ║
+║         YuviXAkshit TOOL v4.0 — ENCRYPT + DECRYPT           ║
 ║   16-Layer XOR · GZIP · B64 · REV · ROT13                   ║
-║   Fixed dynamic paths for cross-server hosting & no comments║
+║   Live GitHub Auth | 1-Min Sessions | Auto Terminal Wipe    ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
 import os, sys, gzip, base64, hashlib, secrets, struct
 import time, shutil, random, string, codecs, re
+import urllib.request
 from pathlib import Path
 
 # ──────────────────────────────────────────────────────────────
@@ -19,6 +20,8 @@ HASH_FILE   = "hash.txt"
 BACKUP_EXT  = ".yuviback"
 SKIP_CONFIG = ["config.php", "hash.txt", ".htaccess"]
 TARGET_EXTS = {".php", ".html", ".htm", ".phtml"}
+AUTH_URL    = "https://raw.githubusercontent.com/AKMKFI8838/Raw/refs/heads/main/key.txt"
+SESSION_DUR = 60 # 1 minute in seconds
 
 # ──────────────────────────────────────────────────────────────
 #  COLOURS
@@ -31,6 +34,32 @@ def info(m):  print(f"  {C}[*]{W} {m}")
 def warn(m):  print(f"  {Y}[!]{W} {m}")
 def err(m):   print(f"  {R}[✗]{W} {m}")
 def head(m):  print(f"\n{B}{C}{'─'*54}\n  {m}\n{'─'*54}{W}")
+def clear_screen(): os.system('cls' if os.name == 'nt' else 'clear')
+
+# ──────────────────────────────────────────────────────────────
+#  AUTHENTICATION
+# ──────────────────────────────────────────────────────────────
+def authenticate():
+    clear_screen()
+    head("AUTHENTICATION REQUIRED")
+    info("Connecting to Auth Server...")
+    try:
+        req = urllib.request.Request(AUTH_URL)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            valid_keys = response.read().decode('utf-8').splitlines()
+    except Exception as e:
+        err(f"Failed to connect to auth server: {e}")
+        sys.exit(1)
+
+    user_key = input(f"\n  {Y}Enter your access key: {W}").strip()
+    
+    if user_key in valid_keys and user_key != "":
+        ok("Access Granted! Session valid for 1 minute.")
+        time.sleep(1)
+        return time.time()
+    else:
+        err("Invalid Key! Access Denied.")
+        sys.exit(1)
 
 # ──────────────────────────────────────────────────────────────
 #  HELPERS
@@ -207,10 +236,9 @@ def encrypt_file(filepath: str, key: bytes) -> tuple[bool, str]:
     return True, f"{len(source)}B → {os.path.getsize(out_path)}B"
 
 # ──────────────────────────────────────────────────────────────
-#  DECRYPT — single file, multi-pass
+#  DECRYPT
 # ──────────────────────────────────────────────────────────────
 def decrypt_once(text: str):
-    """Returns decrypted bytes or None if not a stub."""
     if "YUX" not in text or "eval('?>'" not in text:
         return None
     km = re.search(r"\$\w+\s*=\s*'([0-9a-fA-F]{128})'", text)
@@ -263,7 +291,7 @@ def self_test(key: bytes) -> bool:
     return False
 
 # ──────────────────────────────────────────────────────────────
-#  FILE COLLECTION
+#  FILE COLLECTION & HTACCESS
 # ──────────────────────────────────────────────────────────────
 def collect_files(target_dir: str, skip_list: list) -> list:
     files = []
@@ -281,9 +309,6 @@ def collect_files(target_dir: str, skip_list: list) -> list:
                 files.append(fp)
     return sorted(files)
 
-# ──────────────────────────────────────────────────────────────
-#  HTACCESS
-# ──────────────────────────────────────────────────────────────
 def write_htaccess(target_dir: str):
     block = """\n<FilesMatch "\\.yuviback$">
     Order deny,allow
@@ -301,14 +326,15 @@ def write_htaccess(target_dir: str):
         ok(".htaccess security rules added")
 
 # ──────────────────────────────────────────────────────────────
-#  UI HELPERS
+#  UI HELPERS & MENUS
 # ──────────────────────────────────────────────────────────────
-def banner():
+def banner(remaining_time):
     print(f"""
 {C}{B}╔══════════════════════════════════════════════════════════════╗
-║          YuviXAkshit TOOL v3.1 — All-in-One                  ║
+║          YuviXAkshit TOOL v4.0 — All-in-One                  ║
 ║   [E] Encrypt  ·  [D] Decrypt  ·  [T] Self-Test  ·  [Q] Quit ║
-╚══════════════════════════════════════════════════════════════╝{W}""")
+╚══════════════════════════════════════════════════════════════╝{W}
+  {DIM}Session expires in: {int(remaining_time)} seconds{W}""")
 
 def ask(prompt, choices):
     while True:
@@ -320,15 +346,17 @@ def ask(prompt, choices):
         warn(f"Enter one of: {', '.join(choices)}")
 
 def confirm(prompt):
-    v = ask(f"{prompt} (yes/no):", {"yes","y","no","n"})
-    return v in ("yes","y")
+    return ask(f"{prompt} (yes/no):", {"yes","y","no","n"}) in ("yes","y")
+
+def pause():
+    input(f"\n  {C}Press Enter to return to menu...{W}")
 
 # ──────────────────────────────────────────────────────────────
-#  ENCRYPT FLOW
+#  MAIN FLOWS
 # ──────────────────────────────────────────────────────────────
 def run_encrypt(target_dir):
+    clear_screen()
     run_dir = os.getcwd()
-
     head("KEY SETUP")
     existing = load_key(run_dir)
     if existing:
@@ -341,7 +369,7 @@ def run_encrypt(target_dir):
 
     head("SELF-TEST")
     if not self_test(key):
-        err("Aborting."); return
+        err("Aborting."); pause(); return
 
     skip = list(SKIP_CONFIG)
     extra = input(f"\n  {Y}Extra file to skip (Enter = none): {W}").strip()
@@ -352,14 +380,13 @@ def run_encrypt(target_dir):
     head("SCAN")
     files = collect_files(target_dir, skip)
     if not files:
-        warn("No target files found."); return
+        warn("No target files found."); pause(); return
 
     info(f"Found {len(files)} file(s):")
-    for f in files:
-        print(f"    {G}→{W} {os.path.relpath(f, target_dir)}")
+    for f in files: print(f"    {G}→{W} {os.path.relpath(f, target_dir)}")
 
     if not confirm("\n  Proceed? Files will be REPLACED in-place."):
-        warn("Aborted."); return
+        warn("Aborted."); pause(); return
 
     head("ENCRYPTING")
     ok_n = skip_n = fail_n = 0
@@ -392,13 +419,11 @@ def run_encrypt(target_dir):
         ok(f"Deleted {n} backup(s)")
     else:
         info("Backups retained")
+    pause()
 
-# ──────────────────────────────────────────────────────────────
-#  DECRYPT FLOW
-# ──────────────────────────────────────────────────────────────
 def run_decrypt(target_dir):
+    clear_screen()
     head("SCANNING FOR ENCRYPTED FILES")
-
     all_php = []
     for root,dirs,names in os.walk(target_dir):
         dirs[:] = [d for d in dirs if not d.startswith(".")
@@ -410,21 +435,18 @@ def run_decrypt(target_dir):
     stubs = []
     for fp in sorted(all_php):
         try:
-            with open(fp,"r",encoding="utf-8",errors="replace") as f:
-                peek = f.read(8192)
-            if "YUX" in peek and "eval('?>'" in peek:
-                stubs.append(fp)
+            with open(fp,"r",encoding="utf-8",errors="replace") as f: peek = f.read(8192)
+            if "YUX" in peek and "eval('?>'" in peek: stubs.append(fp)
         except: pass
 
     if not stubs:
-        warn("No encrypted stubs found in this directory."); return
+        warn("No encrypted stubs found in this directory."); pause(); return
 
     info(f"Found {len(stubs)} encrypted file(s):")
-    for f in stubs:
-        print(f"    {G}→{W} {os.path.relpath(f, target_dir)}")
+    for f in stubs: print(f"    {G}→{W} {os.path.relpath(f, target_dir)}")
 
     if not confirm("\n  Replace all in-place with decrypted originals?"):
-        warn("Aborted."); return
+        warn("Aborted."); pause(); return
 
     head("DECRYPTING")
     ok_n = skip_n = fail_n = 0
@@ -443,24 +465,29 @@ def run_decrypt(target_dir):
     print(f"  {G}Decrypted : {ok_n}{W}")
     print(f"  {Y}Skipped   : {skip_n}{W}")
     print(f"  {R}Failed    : {fail_n}{W}")
+    pause()
 
-# ──────────────────────────────────────────────────────────────
-#  MAIN MENU
-# ──────────────────────────────────────────────────────────────
 def main():
-    banner()
-
-    if len(sys.argv) > 1:
-        target_dir = os.path.abspath(sys.argv[1])
-    else:
-        target_dir = os.getcwd()
+    if len(sys.argv) > 1: target_dir = os.path.abspath(sys.argv[1])
+    else: target_dir = os.getcwd()
 
     if not os.path.isdir(target_dir):
         err(f"Not a directory: {target_dir}"); sys.exit(1)
 
-    print(f"\n  {DIM}Directory : {target_dir}{W}")
+    # Trigger Authentication Sequence
+    session_start = authenticate()
 
     while True:
+        clear_screen()
+        time_elapsed = time.time() - session_start
+        if time_elapsed > SESSION_DUR:
+            err("SESSION EXPIRED. Please restart the script to authenticate again.")
+            sys.exit(0)
+            
+        remaining = SESSION_DUR - time_elapsed
+        banner(remaining)
+        print(f"  {DIM}Directory : {target_dir}{W}")
+
         print(f"""
   {B}┌─────────────────────────────┐
   │  {G}[E]{W}{B} Encrypt PHP files       │
@@ -471,13 +498,15 @@ def main():
 
         choice = ask("Choose option [E/D/T/Q]:", {"e","d","t","q"})
 
-        if   choice == "e": run_encrypt(target_dir)
+        if choice == "e": run_encrypt(target_dir)
         elif choice == "d": run_decrypt(target_dir)
         elif choice == "t":
+            clear_screen()
             head("SELF-TEST")
-            key = generate_key(64)
-            self_test(key)
+            self_test(generate_key(64))
+            pause()
         elif choice == "q":
+            clear_screen()
             print(f"\n  {C}Bye!{W}\n")
             break
 
